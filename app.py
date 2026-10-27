@@ -144,8 +144,20 @@ def fmt(v, dec=2):
     return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+# Servidores oficiales con certificado SSL incompleto (les falta el certificado intermedio).
+# Solo para ellos se reintenta la descarga sin verificar el certificado.
+SERVIDORES_SSL_INCOMPLETO = ("colaboracion.dnp.gov.co",)
+
+
 def bajar(url, timeout=180):
-    r = requests.get(url, headers=UA, timeout=timeout)
+    try:
+        r = requests.get(url, headers=UA, timeout=timeout)
+    except requests.exceptions.SSLError:
+        if not any(s in url for s in SERVIDORES_SSL_INCOMPLETO):
+            raise
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        r = requests.get(url, headers=UA, timeout=timeout, verify=False)
     r.raise_for_status()
     return r.content
 
@@ -173,26 +185,60 @@ def parse_ancho(df):
     if not encabezado:
         return pd.DataFrame()
     i0, cols = encabezado
-    filas, vistos = [], set()
+    candidatos = {}   # departamento -> lista de (etiqueta, fila)
+    orden = []
     for i in range(i0 + 1, len(df)):
         fila = df.iloc[i].tolist()
-        depto = None
+        depto, etiqueta = None, ""
         for j, v in enumerate(fila):
-            if j in cols or not isinstance(v, str):
+            if j in cols or not isinstance(v, str) or not v.strip():
                 continue
-            depto = normalizar_departamento(v)
-            if depto:
-                break
+            d = normalizar_departamento(v) if depto is None else None
+            if d:
+                depto = d
+            else:
+                etiqueta += " " + quitar_tildes(v)
         if not depto:
             continue
-        if depto in vistos:  # empieza otro bloque de la misma hoja
-            break
-        vistos.add(depto)
+        if depto in candidatos and not etiqueta.strip():
+            break  # empieza otro bloque de la misma hoja
+        if depto not in candidatos:
+            candidatos[depto] = []
+            orden.append(depto)
+        candidatos[depto].append((etiqueta.strip(), fila))
+
+    preferidas = ("producto interno bruto", "pib", "total")
+    filas = []
+    for depto in orden:
+        opciones = candidatos[depto]
+        elegida = next((f for e, f in opciones if any(p in e for p in preferidas)), opciones[0][1])
         for j, anio in cols.items():
-            v = pd.to_numeric(fila[j], errors="coerce")
+            v = pd.to_numeric(elegida[j], errors="coerce")
             if pd.notna(v):
                 filas.append((depto, anio, float(v)))
     return pd.DataFrame(filas, columns=["departamento", "anio", "valor"])
+
+
+def parse_largo(df):
+    """Tabla con columnas Departamento | Año | Valor (formato largo)."""
+    for i in range(min(len(df), 40)):
+        enc = [quitar_tildes(v) if isinstance(v, str) else "" for v in df.iloc[i].tolist()]
+        c_dep = next((j for j, n in enumerate(enc) if "depart" in n and "cod" not in n), None)
+        c_anio = next((j for j, n in enumerate(enc) if n in ("ano", "anio", "periodo", "vigencia") or n.startswith("ano ")), None)
+        if c_dep is None or c_anio is None:
+            continue
+        cuerpo = df.iloc[i + 1:]
+        numericas = [j for j in range(df.shape[1]) if j not in (c_dep, c_anio)
+                     and pd.to_numeric(cuerpo.iloc[:, j], errors="coerce").notna().mean() > 0.6]
+        if not numericas:
+            return pd.DataFrame()
+        d = pd.DataFrame({
+            "departamento": cuerpo.iloc[:, c_dep].apply(normalizar_departamento),
+            "anio": cuerpo.iloc[:, c_anio].apply(a_anio),
+            "valor": pd.to_numeric(cuerpo.iloc[:, numericas[-1]], errors="coerce"),
+        }).dropna()
+        return d.groupby(["departamento", "anio"], as_index=False)["valor"].first()
+    return pd.DataFrame()
 
 
 @st.cache_data(ttl=TTL, show_spinner=False)
@@ -210,6 +256,8 @@ def cargar_excel_ancho(url, prefijo, solo=None):
         d = parse_ancho(raw)
         if d.empty:  # quizá los años están en filas y los departamentos en columnas
             d = parse_ancho(raw.T.reset_index(drop=True))
+        if d.empty:  # quizá es una tabla larga: Departamento | Año | Valor
+            d = parse_largo(raw)
         if d.empty or d["departamento"].nunique() < 10:
             continue
         nombre = f"{prefijo}: {titulo_hoja(raw) or hoja}"[:120]
