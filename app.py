@@ -519,9 +519,6 @@ CATEGORIAS = {
         dict(nombre="PIB total por departamentos 2005–2025pr", institucion="DANE",
              url="https://www.dane.gov.co/files/operaciones/PIB/anex-PIBDep-TotalDep-2025pr.xlsx",
              fn=lambda u: cargar_excel_ancho(u, "PIB"), derivado="per_capita"),
-        dict(nombre="Retropolación PIB departamental 1980–2025pr", institucion="DANE",
-             url="https://www.dane.gov.co/files/operaciones/PIB/anex-PIBDep-RetropoDepart-2025pr.xlsx",
-             fn=lambda u: cargar_excel_ancho(u, "PIB serie larga"), derivado=None),
     ],
     "Mercado laboral": [
         dict(nombre="GEIH – Mercado laboral por departamentos", institucion="DANE",
