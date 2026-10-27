@@ -10,7 +10,7 @@ Todos los datos se descargan en vivo de **fuentes oficiales**. La aplicación **
 
 | Categoría | Fuente oficial | Formato |
 |---|---|---|
-| Crecimiento / PIB | DANE – PIB por departamentos 2005–2025pr y retropolación 1980–2025pr | Excel |
+| Crecimiento / PIB | DANE – PIB por departamentos 2005–2025pr | Excel |
 | Mercado laboral | DANE – GEIH, mercado laboral por departamentos (total, hombres, mujeres, urbano y rural) | Excel |
 | Seguridad ciudadana | datos.gov.co (Policía Nacional / MinDefensa): conjuntos `4rxi-8m8d` y `m8fd-ahd9` | API SODA |
 | Finanzas públicas | DNP – Operaciones Efectivas de Caja (OEC) 2000–2024 | Excel |
@@ -53,5 +53,6 @@ streamlit run app.py
 - El PIB de los últimos años es preliminar y puede ser revisado por el DANE.
 - Las tasas per cápita solo existen desde 2018, por la cobertura de las proyecciones de población.
 - Las finanzas OEC se presentan como suma de las entidades territoriales reportadas para cada departamento.
+- El servidor del DNP tiene un certificado de seguridad incompleto; para ese único servidor oficial la descarga se reintenta sin verificar el certificado.
 - La base de grupos de investigación tiene su propia fecha de corte, indicada por MinCiencias.
 - El mapa usa un archivo público de límites departamentales; los valores siempre vienen de la fuente oficial.
